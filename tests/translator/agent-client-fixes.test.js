@@ -10,6 +10,8 @@ import { applyThinking } from "../../open-sse/translator/concerns/thinkingUnifie
 import { kiroToClaudeResponse } from "../../open-sse/translator/response/kiro-to-claude.js";
 import { kiroToOpenAIResponse } from "../../open-sse/translator/response/kiro-to-openai.js";
 import { selectAnthropicBeta } from "../../open-sse/providers/shared.js";
+import { hoistToolResultImages } from "../../open-sse/translator/formats/claude.js";
+import { openaiToCommandCodeRequest } from "../../open-sse/translator/request/openai-to-commandcode.js";
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
@@ -155,5 +157,30 @@ describe("redact-thinking beta follows the client's display request", () => {
     expect(summarized).not.toContain("redact-thinking-2026-02-12");
     expect(summarized).toContain("interleaved-thinking-2025-05-14");
     expect(summarized).toContain("effort-2025-11-24");
+  });
+});
+
+describe("tool-result images reach Anthropic-compatible and Command Code upstreams", () => {
+  it("hoists a tool_result image into the same user turn after the results", () => {
+    const body = screenshotTurn();
+    const out = hoistToolResultImages(body);
+    const user = out.messages[2];
+    expect(user.content[0].type).toBe("tool_result");
+    expect(user.content[0].content.every((c) => c.type !== "image")).toBe(true);
+    expect(user.content.some((c) => c.type === "image" && c.source?.data === PNG)).toBe(true);
+    expect(user.content.find((c) => c.type === "text" && /toolu_1/.test(c.text))).toBeTruthy();
+    // No image: untouched object identity.
+    const plain = { messages: [{ role: "user", content: [{ type: "tool_result", tool_use_id: "x", content: "ok" }] }] };
+    expect(hoistToolResultImages(plain)).toBe(plain);
+  });
+
+  it("sends an image block to Command Code instead of a placeholder", () => {
+    const openaiBody = translateRequest(FORMATS.CLAUDE, FORMATS.OPENAI, "muse-spark", screenshotTurn(), true, null, "commandcode");
+    const out = openaiToCommandCodeRequest("muse-spark", openaiBody, true);
+    const json = JSON.stringify(out);
+    expect(json).not.toContain("[image omitted]");
+    expect(json).toContain(`"type":"image"`);
+    expect(json).toContain(`data:image/png;base64,${PNG}`);
+    expect(json).toContain(`"mediaType":"image/png"`);
   });
 });
