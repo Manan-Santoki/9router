@@ -9,6 +9,7 @@ import { FORMATS } from "../../open-sse/translator/formats.js";
 import { applyThinking } from "../../open-sse/translator/concerns/thinkingUnified.js";
 import { kiroToClaudeResponse } from "../../open-sse/translator/response/kiro-to-claude.js";
 import { kiroToOpenAIResponse } from "../../open-sse/translator/response/kiro-to-openai.js";
+import { selectAnthropicBeta } from "../../open-sse/providers/shared.js";
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
@@ -143,5 +144,16 @@ describe("thinking display is preserved for Claude-format upstreams", () => {
     const without = { model: "claude-sonnet-5", thinking: { type: "adaptive" }, output_config: { effort: "high" }, messages: [] };
     applyThinking(FORMATS.CLAUDE, "claude-sonnet-5", without, "claude");
     expect(without.thinking).toEqual({ type: "adaptive" });
+  });
+});
+
+describe("redact-thinking beta follows the client's display request", () => {
+  it("keeps redact-thinking by default and drops it for summarized display", () => {
+    expect(selectAnthropicBeta("claude-sonnet-5")).toContain("redact-thinking-2026-02-12");
+    expect(selectAnthropicBeta("claude-sonnet-5", { thinking: { type: "adaptive", display: "omitted" } })).toContain("redact-thinking-2026-02-12");
+    const summarized = selectAnthropicBeta("claude-sonnet-5", { thinking: { type: "adaptive", display: "summarized" } });
+    expect(summarized).not.toContain("redact-thinking-2026-02-12");
+    expect(summarized).toContain("interleaved-thinking-2025-05-14");
+    expect(summarized).toContain("effort-2025-11-24");
   });
 });
